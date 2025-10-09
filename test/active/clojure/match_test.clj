@@ -44,8 +44,7 @@
     (t/testing "with regex"
       (let [c (p/parse-clause (:k #"foo"))]
         (t/is (= :k (p/key-matches-without-binding-clause-key c)))
-        (t/is (= "foo" (.pattern ^java.util.regex.Pattern (p/regex-matcher-regex (p/key-matches-without-binding-clause-matcher c)))))
-        ))
+        (t/is (= "foo" (.pattern ^java.util.regex.Pattern (p/regex-matcher-regex (p/key-matches-without-binding-clause-matcher c)))))))
     (t/testing "with any other value"
       (t/is (= (p/make-key-matches-without-binding-clause :k (p/make-constant-matcher "foo"))
                (p/parse-clause (:k "foo"))))))
@@ -149,10 +148,10 @@
 (t/deftest path-matches-with-binding-clause->rhs-match-test
   (t/is (= `[~(symbol "z") (get-in {:x {:y {:z "b"}}} [:x :y :z] "b")]
            (p/path-matches-with-binding-clause->rhs-match {:x {:y {:z "b"}}}
-                                             (p/path-matches-with-binding-clause [:x :y :z] (p/match-const "b") "z"))))
+                                                          (p/path-matches-with-binding-clause [:x :y :z] (p/match-const "b") "z"))))
   (t/is (= `[~(symbol "rebind") (get-in {:x {:y {:z "b"}}} [:x :y :z] "b")]
            (p/path-matches-with-binding-clause->rhs-match {:x {:y {:z "b"}}}
-                                             (p/path-matches-with-binding-clause [:x :y :z] (p/match-const "b") "rebind")))))
+                                                          (p/path-matches-with-binding-clause [:x :y :z] (p/match-const "b") "rebind")))))
 
 (t/deftest reduce-lhs-test
   (t/is (empty? (p/reduce-lhs [])))
@@ -171,7 +170,6 @@
                           (list {:y '_} :guard [:guard-2])
                           {:a 42}
                           (list {:z '_} :guard [:guard-3])]))))
-
 
 ;; Testing Macro
 
@@ -235,9 +233,9 @@
       (t/is (= false (example-matcher three-data)))))
   (t/testing "Paths"
     (t/is (= [{}] ((p/map-matcher [([:a] :as a)] [a]) {:a {}})))
-    (t/is (= [] ((p/map-matcher [([:a b] "c")] []) {:a { "b" "c"}})))
-    (t/is (= [] ((p/map-matcher [([:a b c] "d")] []) {:a { "b" {"c" "d"}}})))
-    (t/is (= ["d"] ((p/map-matcher [([:a b c] "d" :as z)] [z]) {:a { "b" {"c" "d"}}})))))
+    (t/is (= [] ((p/map-matcher [([:a b] "c")] []) {:a {"b" "c"}})))
+    (t/is (= [] ((p/map-matcher [([:a b c] "d")] []) {:a {"b" {"c" "d"}}})))
+    (t/is (= ["d"] ((p/map-matcher [([:a b c] "d" :as z)] [z]) {:a {"b" {"c" "d"}}})))))
 
 (t/deftest map-matcher-optional-test
   (t/testing "Optional values"
@@ -282,8 +280,7 @@
     (t/is (= ["D"] ((p/map-matcher [(? [:a b c] "D" :as a)] [a]) {:a "b"})))
     (t/is (= ["D"] ((p/map-matcher [(? [:a b c] "D" :as a)] [a]) {:a {"b" {}}})))
     (t/is (= ["D"] ((p/map-matcher [(? [:a b c] "D" :as a)] [a]) {:a {"b" {"e" "d"}}})))
-    (t/is (= ["d"] ((p/map-matcher [(? [:a b c] "D" :as a)] [a]) {:a {"b" {"c" "d"}}})))
-    ))
+    (t/is (= ["d"] ((p/map-matcher [(? [:a b c] "D" :as a)] [a]) {:a {"b" {"c" "d"}}})))))
 
 (p/defpattern one-or
   [(:kind #"one")
@@ -304,6 +301,44 @@
              (example-or-matcher one-data)))
     (t/is (= ["a" "c" 42 23]
              (example-or-matcher two-data)))
+    (t/is (= false (example-or-matcher {:kind "none"})))))
+
+(def example-or-matcher-inline
+  (p/map-matcher
+   [(:kind #"one")
+    (:x (:or "a" "b" "c" "x") :as x)
+    (:y (:or "x" "y" "z"))
+    (:z :as z)
+    :w]
+   [x z]
+   two [a c Z Y]
+   :else false))
+
+(t/deftest map-matcher-or-inline-test
+  (t/testing "Alternative values to match on"
+    (t/is (= ["x" "z"]
+             (example-or-matcher-inline one-data)))
+    (t/is (= ["a" "c" 42 23]
+             (example-or-matcher-inline two-data)))
+    (t/is (= false (example-or-matcher {:kind "none"})))))
+
+(def example-or-matcher-inline-path
+  (p/map-matcher
+   [([:path :kind] #"one")
+    ([:path :x] (:or "a" "b" "c" "x") :as x)
+    ([:path :y] (:or "x" "y" "z"))
+    ([:path :z] :as z)
+    [:path :w]]
+   [x z]
+   two [a c Z Y]
+   :else false))
+
+(t/deftest map-matcher-or-inline-path-test
+  (t/testing "Alternative values to match on"
+    (t/is (= ["x" "z"]
+             (example-or-matcher-inline-path {:path one-data})))
+    (t/is (= ["a" "c" 42 23]
+             (example-or-matcher-inline-path two-data)))
     (t/is (= false (example-or-matcher {:kind "none"})))))
 
 (p/defpattern predicate-pattern
@@ -379,13 +414,13 @@
                ((p/map-matcher p x)
                 evt)))))
   #_(t/testing "as constant with local parse-pattern"
-    (let [x   "x"
-          evt {"X" x}
-          p   (p/parse-pattern [(X x)])]
-      (t/is (= x
+      (let [x   "x"
+            evt {"X" x}
+            p   (p/parse-pattern [(X x)])]
+        (t/is (= x
                ;; Caused by java.lang.UnsupportedOperationException Can't eval locals
-               ((p/map-matcher p x)
-                evt))))))
+                 ((p/map-matcher p x)
+                  evt))))))
 
 (def doc-string-example-map-matcher
   (p/map-matcher
@@ -394,14 +429,14 @@
     (:z :as z)
     :w]
    (println x z)
-    [(:a "a" :as a)
-     (:b "b")
-     (:c :as c)
-     ([:d] :as d)
-     ([:d Z] 42 :as Z)
-     ([:d Y] :as Y)
-     ([:d X] 65)
-     [:d W foo]]
+   [(:a "a" :as a)
+    (:b "b")
+    (:c :as c)
+    ([:d] :as d)
+    ([:d Z] 42 :as Z)
+    ([:d Y] :as Y)
+    ([:d X] 65)
+    [:d W foo]]
    (println a c d Z Y)
    :else false))
 

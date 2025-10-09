@@ -315,7 +315,6 @@
   [& exclusions]
   (complement (apply some-fn exclusions)))
 
-
 (s/def ::regex regex?)
 (s/def ::compare-fn-token #{:compare-fn})
 (s/def ::fn? any?)
@@ -347,7 +346,7 @@
 
 (s/def ::path-exists-without-binding
   (s/or :flat ::path
-                        :list (s/cat :path ::path)))
+        :list (s/cat :path ::path)))
 
 (s/def ::path-exists-with-binding
   (s/cat :path ::path :binding-key ::binding-key :binding ::binding))
@@ -484,7 +483,7 @@
           :optional-path-with-default-binding
           (let [path (mapv make-key (:path body))
                 b    (make-binding (:binding body))]
-              `(optional-path-with-default-binding-clause ~path ~(:default-value body) ~b)))))))
+            `(optional-path-with-default-binding-clause ~path ~(:default-value body) ~b)))))))
 
 (defmacro parse-clauses
   [cs]
@@ -550,11 +549,14 @@
           :key-matches-without-binding
           (let [k           (make-key (:key body))
                 match       (:match-value body)
-                predicate?  (= :compare-fn (first match))
+                match-kind  (first match)
                 match-value (second match)]
             (cond
-              predicate?
+              (= :compare-fn match-kind)
               [`({~k ~'_} :guard [(constantly (~(:fn match-value) (get-in ~message [~k])))])
+               `[]]
+              (= :options match-kind)
+              [`{~k (:or ~@(:options match-value))}
                `[]]
               :else
               [`{~k ~match-value}
@@ -564,11 +566,14 @@
           (let [k           (make-key (:key body))
                 b           (make-binding (:binding body))
                 match       (:match-value body)
-                predicate?  (= :compare-fn (first match))
+                match-kind  (first match)
                 match-value (second match)]
             (cond
-              predicate?
+              (= :compare-fn match-kind)
               [`({~k ~'_} :guard [(constantly (~(:fn match-value) (get-in ~message [~k])))])
+               `[~(symbol b) (get-in ~message [~k])]]
+              (= :options match-kind)
+              [`{~k (:or ~@(:options match-value))}
                `[~(symbol b) (get-in ~message [~k])]]
               :else
               [`{~k ~match-value}
@@ -577,32 +582,37 @@
           :optional-key-with-default-binding
           (let [k           (make-key (:key body))
                 b           (make-binding (:binding body))]
-              [{} `[~(symbol b) (get-in ~message [~k] ~(:default-value body))]])
+            [{} `[~(symbol b) (get-in ~message [~k] ~(:default-value body))]])
 
           :path-matches-without-binding
           (let [path        (mapv make-key (:path body))
                 match       (:match-value body)
-                predicate?  (= :compare-fn (first match))
-                match-value (second match)
-                path-map    (assoc-in {} path match-value)]
+                match-kind  (first match)
+                match-value (second match)]
             (cond
-              predicate?
+              (= :compare-fn match-kind)
               [`(~(fold-path path '_) :guard [(constantly (~(:fn match-value) (get-in ~message ~path)))])
                `[]]
+              (= :options match-kind)
+              [(assoc-in {} path `(:or ~@(:options match-value)))
+               `[]]
               :else
-              [`~path-map
+              [`~(assoc-in {} path match-value)
                `[]]))
 
           :path-matches-with-binding
           (let [path        (mapv make-key (:path body))
                 b           (make-binding (:binding body))
                 match       (:match-value body)
-                predicate?  (= :compare-fn (first match))
+                match-kind  (first match)
                 match-value (second match)
                 path-map    (assoc-in {} path match-value)]
             (cond
-              predicate?
+              (= :compare-fn match-kind)
               [`(~(fold-path path '_) :guard [(constantly (~(:fn match-value) (get-in ~message ~path)))])
+               `[~(symbol b) (get-in ~message ~path)]]
+              (= :options match-kind)
+              [(assoc-in {} path `(:or ~@(:options match-value)))
                `[~(symbol b) (get-in ~message ~path)]]
               :else
               [`~path-map
@@ -625,11 +635,11 @@
 (defn parse-emit-match-syntax
   [message [pattern rhs]]
   (let [[lhss rhss] (reduce (fn [[clauses bindings] c]
-                           (let [[clause binding] (parse-emit-syntax message c)]
-                             [(conj clauses clause)
-                              (conj bindings binding)]))
-                         [[] []]
-                         pattern)]
+                              (let [[clause binding] (parse-emit-syntax message c)]
+                                [(conj clauses clause)
+                                 (conj bindings binding)]))
+                            [[] []]
+                            pattern)]
     [(apply deep-merge lhss)
      `(let ~(into [] (apply concat rhss))
         ~rhs)]))
